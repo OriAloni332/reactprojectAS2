@@ -3,6 +3,7 @@ import mongoose = require('mongoose');
 import postRoutes = require('./routes/postRoutes');
 import commentRoutes = require('./routes/commentRoutes');
 import authRoutes from './routes/authRoutes';
+import { specs, swaggerUi } from './swagger';
 
 const intApp = (): Promise<Express> => {
   const promise = new Promise<Express>((resolve, reject) => {
@@ -11,6 +12,19 @@ const intApp = (): Promise<Express> => {
     // Middleware
     app.use(express.urlencoded({ extended: false }));
     app.use(express.json());
+
+    // Swagger Documentation
+    app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(specs, {
+      explorer: true,
+      customCss: ".swagger-ui .topbar { display: none }",
+      customSiteTitle: "Post & Comments API Documentation"
+    }));
+
+    // Swagger JSON endpoint
+    app.get("/api-docs.json", (req, res) => {
+      res.setHeader("Content-Type", "application/json");
+      res.send(specs);
+    });
 
     // Routes
     app.use("/auth", authRoutes);
