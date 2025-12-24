@@ -1,0 +1,88 @@
+###
+//GetAllPosts
+GET http://localhost:3000/post
+###
+POST http://localhost:3000/post
+Content-Type: application/json
+
+{
+  "title": "Traviling to Japan and dubai", 
+  "senderID": "user123"
+}
+###
+
+###
+POST http://localhost:3000/post
+Content-Type: application/json
+
+{
+  "title": "Vacation On the Beach, Miconos", 
+  "senderID": "user456"
+}
+###
+
+###
+//GetPostById
+GET  http://localhost:3000/post/691b2c1ef901c3ee5767d7c2
+###
+
+###
+//GetPostBySender
+GET http://localhost:3000/post?senderID=user456
+###
+
+###
+//GetAllPosts
+GET http://localhost:3000/post
+###
+//UpdatePost
+PUT http://localhost:3000/post/691b2c1ef901c3ee5767d7c2
+Content-Type: application/json
+
+{
+  "title": "Updated Title: Trip to Paris",
+  "senderID": "MamaMia"
+}
+###
+
+// create comment for a post
+POST http://localhost:3000/comment/post/69230e9d10e2e37229809b80
+Content-Type: application/json
+
+{
+  "content": "This looks like an amazing trip!",
+  "author": "commenter789",
+  "postId": "69230e9d10e2e37229809b80"
+}
+###
+
+// create comment 2 for a post
+POST http://localhost:3000/comment/post/69230e9d10e2e37229809b80
+Content-Type: application/json
+
+{
+  "content": "This is awesome!",
+  "author": "ori",
+  "postId": "69230e9d10e2e37229809b80"
+}
+###
+//GetCommentById
+GET http://localhost:3000/comment/692310e710e2e37229809b8c
+###
+
+###
+//get comments for a post
+GET http://localhost:3000/comment/post/69230e9d10e2e37229809b80
+###
+//update comment by id
+PUT http://localhost:3000/comment/692310e710e2e37229809b8c
+Content-Type: application/json
+
+{
+  "content": "Updated comment content.",
+  "author": "commenter789"    
+}
+###
+//delete comment by id
+DELETE http://localhost:3000/comment/692310e710e2e37229809b8c
+###
