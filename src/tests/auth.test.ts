@@ -22,6 +22,22 @@ describe("Auth API", () => {
         expect(response.statusCode).toBe(401);
     });
 
+    test("test register with missing email", async () => {
+        const response = await request(app).post("/auth/register").send({
+            password: userData.password
+        });
+        expect(response.statusCode).toBe(401);
+        expect(response.body).toHaveProperty("error");
+    });
+
+    test("test register with missing password", async () => {
+        const response = await request(app).post("/auth/register").send({
+            email: userData.email
+        });
+        expect(response.statusCode).toBe(401);
+        expect(response.body).toHaveProperty("error");
+    });
+
     test("test register", async () => {
         const response = await request(app).post("/auth/register").send({
             email: userData.email,
@@ -33,6 +49,15 @@ describe("Auth API", () => {
         userData._id = response.body._id;
         userData.token = response.body.token;
         userData.refreshToken = response.body.refreshToken;
+    });
+
+    test("test register with duplicate email", async () => {
+        const response = await request(app).post("/auth/register").send({
+            email: userData.email,
+            password: userData.password
+        });
+        expect(response.statusCode).toBe(401);
+        expect(response.body).toHaveProperty("error");
     });
 
     test("test access with token permitted1", async () => {
@@ -49,6 +74,40 @@ describe("Auth API", () => {
             .set("Authorization", "Bearer " + newToken)
             .send(singlePostData);
         expect(response.statusCode).toBe(401);
+        expect(response.body).toHaveProperty("error");
+    });
+
+    test("test login with missing email", async () => {
+        const response = await request(app).post("/auth/login").send({
+            password: userData.password
+        });
+        expect(response.statusCode).toBe(400);
+        expect(response.body).toHaveProperty("error");
+    });
+
+    test("test login with missing password", async () => {
+        const response = await request(app).post("/auth/login").send({
+            email: userData.email
+        });
+        expect(response.statusCode).toBe(400);
+        expect(response.body).toHaveProperty("error");
+    });
+
+    test("test login with wrong email", async () => {
+        const response = await request(app).post("/auth/login").send({
+            email: "wrong@example.com",
+            password: userData.password
+        });
+        expect(response.statusCode).toBe(400);
+        expect(response.body).toHaveProperty("error");
+    });
+
+    test("test login with wrong password", async () => {
+        const response = await request(app).post("/auth/login").send({
+            email: userData.email,
+            password: "wrongpassword"
+        });
+        expect(response.statusCode).toBe(400);
         expect(response.body).toHaveProperty("error");
     });
 
@@ -103,6 +162,20 @@ describe("Auth API", () => {
         console.log(newAccessResponse.body);
         expect(newAccessResponse.statusCode).toBe(201);
         expect(newAccessResponse.body).toHaveProperty("_id");
+    });
+
+    test("test refresh token with missing token", async () => {
+        const response = await request(app).post("/auth/refresh-token").send({});
+        expect(response.statusCode).toBe(401);
+        expect(response.body).toHaveProperty("error");
+    });
+
+    test("test refresh token with invalid token", async () => {
+        const response = await request(app).post("/auth/refresh-token").send({
+            refreshToken: "invalidtoken123"
+        });
+        expect(response.statusCode).toBe(401);
+        expect(response.body).toHaveProperty("error");
     });
 
     //test double use of refresh token

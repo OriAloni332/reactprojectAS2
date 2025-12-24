@@ -58,6 +58,36 @@ describe("Comment API", () => {
     expect(response.body).toEqual([]);
   });
 
+  test("test create comment without authentication", async () => {
+    console.log("Test: POST create comment without auth");
+    const response = await request(app)
+      .post(`/comment/post/${testPostId1}`)
+      .send({
+        content: "Unauthorized comment",
+        author: "Test Author",
+      });
+    expect(response.statusCode).toBe(401);
+    expect(response.body).toHaveProperty("error");
+  });
+
+  test("test create comment with missing content", async () => {
+    console.log("Test: POST create comment with missing content");
+    const response = await request(app)
+      .post(`/comment/post/${testPostId1}`)
+      .set("Authorization", `Bearer ${authToken}`)
+      .send({ author: "Test Author" });
+    expect(response.statusCode).toBe(500);
+  });
+
+  test("test create comment with missing author", async () => {
+    console.log("Test: POST create comment with missing author");
+    const response = await request(app)
+      .post(`/comment/post/${testPostId1}`)
+      .set("Authorization", `Bearer ${authToken}`)
+      .send({ content: "Test content" });
+    expect(response.statusCode).toBe(500);
+  });
+
   test("test post create comments to a post", async () => {
     console.log("Test: POST create comments");
     // Add all comments from commentsData
@@ -128,6 +158,19 @@ describe("Comment API", () => {
     expect(response.statusCode).toBe(404);
   });
 
+  test("test update comment without authentication", async () => {
+    console.log("Test: PUT update comment without auth");
+    const updatedData = {
+      content: "Unauthorized update",
+      author: commentsData[2].author,
+    };
+    const response = await request(app)
+      .put(`/comment/${commentsData[2]._id}`)
+      .send(updatedData);
+    expect(response.statusCode).toBe(401);
+    expect(response.body).toHaveProperty("error");
+  });
+
   test("test put update comment by ID", async () => {
     console.log("Test: PUT update comment by ID");
     const updatedData = {
@@ -165,6 +208,13 @@ describe("Comment API", () => {
       .send(updatedData);
 
     expect(response.statusCode).toBe(404);
+  });
+
+  test("test delete comment without authentication", async () => {
+    console.log("Test: DELETE comment without auth");
+    const response = await request(app).delete(`/comment/${commentsData[2]._id}`);
+    expect(response.statusCode).toBe(401);
+    expect(response.body).toHaveProperty("error");
   });
 
   test("test delete comment by ID", async () => {

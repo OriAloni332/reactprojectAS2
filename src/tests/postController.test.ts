@@ -39,6 +39,31 @@ describe("Post API", () => {
     expect(response.body).toEqual([]);
   });
 
+  test("test create post without authentication", async () => {
+    console.log("Test: POST create post without auth");
+    const response = await request(app).post("/post").send(postsData[0]);
+    expect(response.statusCode).toBe(401);
+    expect(response.body).toHaveProperty("error");
+  });
+
+  test("test create post with missing title", async () => {
+    console.log("Test: POST create post with missing title");
+    const response = await request(app)
+      .post("/post")
+      .set("Authorization", `Bearer ${authToken}`)
+      .send({ senderID: "sender123" });
+    expect(response.statusCode).toBe(500);
+  });
+
+  test("test create post with missing senderID", async () => {
+    console.log("Test: POST create post with missing senderID");
+    const response = await request(app)
+      .post("/post")
+      .set("Authorization", `Bearer ${authToken}`)
+      .send({ title: "Test Post" });
+    expect(response.statusCode).toBe(500);
+  });
+
   test("test post create new posts", async () => {
     console.log("Test: POST create new posts");
     // Add all posts from postsData
@@ -92,6 +117,19 @@ describe("Post API", () => {
     expect(response.statusCode).toBe(404);
   });
 
+  test("test update post without authentication", async () => {
+    console.log("Test: PUT update post without auth");
+    const updatedData = {
+      title: "Updated Title",
+      senderID: postsData[0].senderID,
+    };
+    const response = await request(app)
+      .put(`/post/${postsData[0]._id}`)
+      .send(updatedData);
+    expect(response.statusCode).toBe(401);
+    expect(response.body).toHaveProperty("error");
+  });
+
   test("test put update post by ID", async () => {
     console.log("Test: PUT update post by ID");
     const updatedData = {
@@ -127,6 +165,13 @@ describe("Post API", () => {
       .send(updatedData);
 
     expect(response.statusCode).toBe(404);
+  });
+
+  test("test delete post without authentication", async () => {
+    console.log("Test: DELETE post without auth");
+    const response = await request(app).delete(`/post/${postsData[0]._id}`);
+    expect(response.statusCode).toBe(401);
+    expect(response.body).toHaveProperty("error");
   });
 
   test("test delete post by ID", async () => {

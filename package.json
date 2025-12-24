@@ -9,8 +9,10 @@
     "build": "tsc",
     "type-check": "tsc --noEmit",
     "test": "tsc && jest --runInBand --detectOpenHandles --forceExit",
+    "test:coverage": "tsc && jest --runInBand --detectOpenHandles --forceExit --coverage",
     "testpost": "tsc && jest --runInBand --detectOpenHandles --forceExit src/tests/postController.test.ts",
-    "testcomment": "tsc && jest --runInBand --detectOpenHandles --forceExit src/tests/commentController.test.ts"
+    "testcomment": "tsc && jest --runInBand --detectOpenHandles --forceExit src/tests/commentController.test.ts",
+    "testauth": "tsc && jest --runInBand --detectOpenHandles --forceExit src/tests/auth.test.ts"
   },
   "author": "Menachi",
   "license": "ISC",
