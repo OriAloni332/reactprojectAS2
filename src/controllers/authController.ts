@@ -30,15 +30,21 @@ const generateToken = (userId: string): Tokens => {
 }
 const register = async (req: Request, res: Response) => {
     // Registration logic here
-    const { email, password } = req.body;
+    const { username, email, password, profileImage, bio } = req.body;
 
-    if (!email || !password) {
-        return sendError(res, "Email and password are required", 401);
+    if (!username || !email || !password) {
+        return sendError(res, "Username, email and password are required", 401);
     }
     try {
         const salt = await bcrypt.genSalt(10);
         const encryptedPassword = await bcrypt.hash(password, salt);
-        const user = await User.create({ email, password: encryptedPassword });
+        const user = await User.create({
+            username,
+            email,
+            password: encryptedPassword,
+            profileImage: profileImage || "",
+            bio: bio || ""
+        });
 
         //generate JWT token
         const secret: string = process.env.JWT_SECRET || "secretkey";
@@ -49,7 +55,12 @@ const register = async (req: Request, res: Response) => {
         await user.save();
 
         //send token back to user
-        res.status(201).json(tokens);
+        res.status(201).json({
+            ...tokens,
+            _id: user._id,
+            username: user.username,
+            email: user.email
+        });
     } catch (error) {
         return sendError(res, "Registration failed", 401);
     }
@@ -123,9 +134,36 @@ const refreshToken = async (req: Request, res: Response) => {
     }
 };
 
+const logout = async (req: Request, res: Response) => {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+        return sendError(res, "Refresh token is required", 401);
+    }
+
+    try {
+        const secret: string = process.env.JWT_SECRET || "secretkey";
+        const decoded: any = jwt.verify(refreshToken, secret);
+
+        const user = await User.findById(decoded.userId);
+        if (!user) {
+            return sendError(res, "Invalid refresh token", 401);
+        }
+
+        // Remove the refresh token from user's tokens array
+        user.refreshToken = user.refreshToken.filter(rt => rt !== refreshToken);
+        await user.save();
+
+        res.status(200).json({ message: "Logged out successfully" });
+    } catch (error) {
+        return sendError(res, "Logout failed", 401);
+    }
+};
+
 
 export default {
     register,
     login,
-    refreshToken
+    refreshToken,
+    logout
 };
