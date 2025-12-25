@@ -207,4 +207,78 @@ describe("Auth API", () => {
         expect(refreshResponse3.statusCode).toBe(401);
         expect(refreshResponse3.body).toHaveProperty("error");
     });
+
+    // Logout tests
+    test("test logout with missing refresh token", async () => {
+        const response = await request(app).post("/auth/logout").send({});
+        expect(response.statusCode).toBe(401);
+        expect(response.body).toHaveProperty("error");
+        expect(response.body.error).toBe("Refresh token is required");
+    });
+
+    test("test logout with invalid refresh token", async () => {
+        const response = await request(app).post("/auth/logout").send({
+            refreshToken: "invalidtoken123"
+        });
+        expect(response.statusCode).toBe(401);
+        expect(response.body).toHaveProperty("error");
+        expect(response.body.error).toBe("Logout failed");
+    });
+
+    test("test logout with valid refresh token", async () => {
+        // First, get a fresh token to logout with
+        const loginResponse = await request(app).post("/auth/login").send({
+            email: userData.email,
+            password: userData.password
+        });
+        expect(loginResponse.statusCode).toBe(200);
+        const logoutRefreshToken = loginResponse.body.refreshToken;
+
+        // Now logout with this refresh token
+        const response = await request(app).post("/auth/logout").send({
+            refreshToken: logoutRefreshToken
+        });
+        expect(response.statusCode).toBe(200);
+        expect(response.body).toHaveProperty("message");
+        expect(response.body.message).toBe("Logged out successfully");
+
+        // Verify the refresh token is no longer valid
+        const refreshResponse = await request(app).post("/auth/refresh-token").send({
+            refreshToken: logoutRefreshToken
+        });
+        expect(refreshResponse.statusCode).toBe(401);
+        expect(refreshResponse.body).toHaveProperty("error");
+    });
+
+    test("test double logout with same refresh token", async () => {
+        // First, get a fresh token
+        const loginResponse = await request(app).post("/auth/login").send({
+            email: userData.email,
+            password: userData.password
+        });
+        expect(loginResponse.statusCode).toBe(200);
+        const logoutRefreshToken = loginResponse.body.refreshToken;
+
+        // First logout should succeed
+        const firstLogout = await request(app).post("/auth/logout").send({
+            refreshToken: logoutRefreshToken
+        });
+        expect(firstLogout.statusCode).toBe(200);
+        expect(firstLogout.body.message).toBe("Logged out successfully");
+
+        // Second logout with same token also succeeds (idempotent)
+        // but the token is already removed, so it has no effect
+        const secondLogout = await request(app).post("/auth/logout").send({
+            refreshToken: logoutRefreshToken
+        });
+        expect(secondLogout.statusCode).toBe(200);
+        expect(secondLogout.body.message).toBe("Logged out successfully");
+
+        // Verify the token cannot be used for refresh (this is the real security check)
+        const refreshResponse = await request(app).post("/auth/refresh-token").send({
+            refreshToken: logoutRefreshToken
+        });
+        expect(refreshResponse.statusCode).toBe(401);
+        expect(refreshResponse.body).toHaveProperty("error");
+    });
 });
