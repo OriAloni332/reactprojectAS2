@@ -4,12 +4,14 @@ import Comment from "../model/commentModel";
 import Post from "../model/postModel";
 import User from "../model/userModel";
 import { Express } from "express";
-import { commentsData, createTestPost, cleanupTestData, singlePostData, userData } from "./testUtils";
+import { commentsData, createTestPost, cleanupTestData, userData, secondUserData, registerAndLoginUser, UserData } from "./testUtils";
 
 let app: Express;
 let testPostId1: string;
 let testPostId2: string;
 let authToken: string;
+let userAData: UserData;
+let userBData: UserData;
 
 beforeAll(async () => {
   app = await intApp();
@@ -17,19 +19,12 @@ beforeAll(async () => {
   await Post.deleteMany({});
   await User.deleteMany({});
 
-  // Register and login to get authentication token
-  await request(app).post("/auth/register").send({
-    username: userData.username,
-    email: userData.email,
-    password: userData.password,
-  });
+  // Register and login User A (primary user)
+  userAData = await registerAndLoginUser(app, userData);
+  authToken = userAData.token!;
 
-  const loginResponse = await request(app).post("/auth/login").send({
-    email: userData.email,
-    password: userData.password,
-  });
-
-  authToken = loginResponse.body.token;
+  // Register and login User B (secondary user for ownership tests)
+  userBData = await registerAndLoginUser(app, secondUserData);
 
   // Create test posts to attach comments to
   testPostId1 = await createTestPost(app, {
@@ -253,5 +248,154 @@ describe("Comment API", () => {
     expect(response.statusCode).toBe(200);
     // Should still have 2 comments
     expect(response.body.length).toBe(2);
+  });
+});
+
+// Ownership/Authorization Tests (403 Forbidden scenarios)
+describe("Comment API - Ownership Authorization", () => {
+  let userACommentId: string;
+
+  beforeAll(async () => {
+    // User A creates a comment
+    const response = await request(app)
+      .post(`/comment/post/${testPostId1}`)
+      .set("Authorization", `Bearer ${userAData.token}`)
+      .send({ content: "User A's private comment", author: "UserA" });
+    userACommentId = response.body._id;
+  });
+
+  test("test User B cannot update User A's comment (403 Forbidden)", async () => {
+    console.log("Test: User B tries to update User A's comment");
+    const response = await request(app)
+      .put(`/comment/${userACommentId}`)
+      .set("Authorization", `Bearer ${userBData.token}`)
+      .send({ content: "Hijacked comment", author: "UserA" });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.body).toHaveProperty("error");
+    expect(response.body.error).toBe("Forbidden - You can only update your own comments");
+  });
+
+  test("test User B cannot delete User A's comment (403 Forbidden)", async () => {
+    console.log("Test: User B tries to delete User A's comment");
+    const response = await request(app)
+      .delete(`/comment/${userACommentId}`)
+      .set("Authorization", `Bearer ${userBData.token}`);
+
+    expect(response.statusCode).toBe(403);
+    expect(response.body).toHaveProperty("error");
+    expect(response.body.error).toBe("Forbidden - You can only delete your own comments");
+  });
+
+  test("test User A can still update their own comment", async () => {
+    console.log("Test: User A updates their own comment");
+    const response = await request(app)
+      .put(`/comment/${userACommentId}`)
+      .set("Authorization", `Bearer ${userAData.token}`)
+      .send({ content: "Updated by owner", author: "UserA" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.content).toBe("Updated by owner");
+  });
+
+  test("test User A can delete their own comment", async () => {
+    console.log("Test: User A deletes their own comment");
+    const response = await request(app)
+      .delete(`/comment/${userACommentId}`)
+      .set("Authorization", `Bearer ${userAData.token}`);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toHaveProperty("message");
+    expect(response.body.message).toBe("Comment deleted successfully");
+  });
+});
+
+// Database Error Tests (Catch Block Coverage)
+describe("Comment API - Database Error Handling", () => {
+  test("test getCommentById handles database error", async () => {
+    console.log("Test: GET comment by ID with database error");
+    const originalFindById = Comment.findById;
+    Comment.findById = jest.fn().mockImplementation(() => {
+      throw new Error("Database query failed");
+    });
+
+    const response = await request(app).get("/comment/507f1f77bcf86cd799439011");
+    expect(response.statusCode).toBe(500);
+    expect(response.body).toHaveProperty("error");
+    expect(response.body.error).toBe("Database query failed");
+
+    Comment.findById = originalFindById;
+  });
+
+  test("test getCommentsByPostId handles database error", async () => {
+    console.log("Test: GET comments by post ID with database error");
+    const originalFind = Comment.find;
+    Comment.find = jest.fn().mockImplementation(() => {
+      throw new Error("Database connection failed");
+    });
+
+    const response = await request(app).get(`/comment/post/${testPostId1}`);
+    expect(response.statusCode).toBe(500);
+    expect(response.body).toHaveProperty("error");
+    expect(response.body.error).toBe("Database connection failed");
+
+    Comment.find = originalFind;
+  });
+
+  test("test updateCommentById handles database error", async () => {
+    console.log("Test: PUT comment with database error");
+    // First create a comment to have a valid ID
+    const createResponse = await request(app)
+      .post(`/comment/post/${testPostId1}`)
+      .set("Authorization", `Bearer ${userAData.token}`)
+      .send({ content: "Comment for error test", author: "TestAuthor" });
+    const commentId = createResponse.body._id;
+
+    const originalFindById = Comment.findById;
+    Comment.findById = jest.fn().mockImplementation(() => {
+      throw new Error("Database update error");
+    });
+
+    const response = await request(app)
+      .put(`/comment/${commentId}`)
+      .set("Authorization", `Bearer ${userAData.token}`)
+      .send({ content: "Updated content", author: "TestAuthor" });
+
+    expect(response.statusCode).toBe(500);
+    expect(response.body).toHaveProperty("error");
+    expect(response.body.error).toBe("Database update error");
+
+    Comment.findById = originalFindById;
+
+    // Clean up
+    await Comment.findByIdAndDelete(commentId);
+  });
+
+  test("test deleteCommentById handles database error", async () => {
+    console.log("Test: DELETE comment with database error");
+    // First create a comment to have a valid ID
+    const createResponse = await request(app)
+      .post(`/comment/post/${testPostId1}`)
+      .set("Authorization", `Bearer ${userAData.token}`)
+      .send({ content: "Comment for delete error test", author: "TestAuthor" });
+    const commentId = createResponse.body._id;
+
+    const originalFindById = Comment.findById;
+    Comment.findById = jest.fn().mockImplementation(() => {
+      throw new Error("Database delete error");
+    });
+
+    const response = await request(app)
+      .delete(`/comment/${commentId}`)
+      .set("Authorization", `Bearer ${userAData.token}`);
+
+    expect(response.statusCode).toBe(500);
+    expect(response.body).toHaveProperty("error");
+    expect(response.body.error).toBe("Database delete error");
+
+    Comment.findById = originalFindById;
+
+    // Clean up
+    await Comment.findByIdAndDelete(commentId);
   });
 });

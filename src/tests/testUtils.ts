@@ -20,6 +20,13 @@ export const userData: UserData = {
   password: "testPasswordAuth123",
 };
 
+// Second user for authorization/ownership testing
+export const secondUserData: UserData = {
+  username: "secondTestUser",
+  email: "second@testAuth.com",
+  password: "secondPassword123",
+};
+
 // Post test data types
 export type PostData = {
   title: string;
@@ -79,5 +86,48 @@ export const createTestPost = async (app: Express, postData?: PostData, token?: 
   }
 
   const response = await req.send(data);
+  return response.body._id;
+};
+
+// Helper function to register and login a user, returning the user data with tokens
+export const registerAndLoginUser = async (
+  app: Express,
+  user: UserData
+): Promise<UserData> => {
+  const request = require("supertest");
+
+  // Register
+  const registerResponse = await request(app).post("/auth/register").send({
+    username: user.username,
+    email: user.email,
+    password: user.password,
+  });
+
+  // Login to get fresh tokens
+  const loginResponse = await request(app).post("/auth/login").send({
+    email: user.email,
+    password: user.password,
+  });
+
+  return {
+    ...user,
+    _id: registerResponse.body._id,
+    token: loginResponse.body.token,
+    refreshToken: loginResponse.body.refreshToken,
+  };
+};
+
+// Helper function to create a test comment and return its ID
+export const createTestComment = async (
+  app: Express,
+  postId: string,
+  commentData: { content: string; author: string },
+  token: string
+): Promise<string> => {
+  const request = require("supertest");
+  const response = await request(app)
+    .post(`/comment/post/${postId}`)
+    .set("Authorization", `Bearer ${token}`)
+    .send(commentData);
   return response.body._id;
 };

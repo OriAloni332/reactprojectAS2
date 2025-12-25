@@ -3,29 +3,24 @@ import intApp from "../index";
 import Post from "../model/postModel";
 import User from "../model/userModel";
 import { Express } from "express";
-import { postsData, cleanupTestData, userData } from "./testUtils";
+import { postsData, cleanupTestData, userData, secondUserData, registerAndLoginUser, UserData } from "./testUtils";
 
 let app: Express;
 let authToken: string;
+let userAData: UserData;
+let userBData: UserData;
 
 beforeAll(async () => {
   app = await intApp();
   await Post.deleteMany({});
   await User.deleteMany({});
 
-  // Register and login to get authentication token
-  await request(app).post("/auth/register").send({
-    username: userData.username,
-    email: userData.email,
-    password: userData.password,
-  });
+  // Register and login User A (primary user)
+  userAData = await registerAndLoginUser(app, userData);
+  authToken = userAData.token!;
 
-  const loginResponse = await request(app).post("/auth/login").send({
-    email: userData.email,
-    password: userData.password,
-  });
-
-  authToken = loginResponse.body.token;
+  // Register and login User B (secondary user for ownership tests)
+  userBData = await registerAndLoginUser(app, secondUserData);
 });
 
 afterAll(async () => {
@@ -202,5 +197,154 @@ describe("Post API", () => {
     expect(response.statusCode).toBe(200);
     // Should have postsData.length - 1 posts (one was deleted)
     expect(response.body.length).toBe(postsData.length - 1);
+  });
+});
+
+// Ownership/Authorization Tests (403 Forbidden scenarios)
+describe("Post API - Ownership Authorization", () => {
+  let userAPostId: string;
+
+  beforeAll(async () => {
+    // User A creates a post
+    const response = await request(app)
+      .post("/post")
+      .set("Authorization", `Bearer ${userAData.token}`)
+      .send({ title: "User A's Private Post", senderID: "userA" });
+    userAPostId = response.body._id;
+  });
+
+  test("test User B cannot update User A's post (403 Forbidden)", async () => {
+    console.log("Test: User B tries to update User A's post");
+    const response = await request(app)
+      .put(`/post/${userAPostId}`)
+      .set("Authorization", `Bearer ${userBData.token}`)
+      .send({ title: "Hijacked Title", senderID: "userA" });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.body).toHaveProperty("error");
+    expect(response.body.error).toBe("Forbidden - You can only update your own posts");
+  });
+
+  test("test User B cannot delete User A's post (403 Forbidden)", async () => {
+    console.log("Test: User B tries to delete User A's post");
+    const response = await request(app)
+      .delete(`/post/${userAPostId}`)
+      .set("Authorization", `Bearer ${userBData.token}`);
+
+    expect(response.statusCode).toBe(403);
+    expect(response.body).toHaveProperty("error");
+    expect(response.body.error).toBe("Forbidden - You can only delete your own posts");
+  });
+
+  test("test User A can still update their own post", async () => {
+    console.log("Test: User A updates their own post");
+    const response = await request(app)
+      .put(`/post/${userAPostId}`)
+      .set("Authorization", `Bearer ${userAData.token}`)
+      .send({ title: "Updated by Owner", senderID: "userA" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.title).toBe("Updated by Owner");
+  });
+
+  test("test User A can delete their own post", async () => {
+    console.log("Test: User A deletes their own post");
+    const response = await request(app)
+      .delete(`/post/${userAPostId}`)
+      .set("Authorization", `Bearer ${userAData.token}`);
+
+    expect(response.statusCode).toBe(200);
+  });
+});
+
+// Database Error Tests (Catch Block Coverage)
+describe("Post API - Database Error Handling", () => {
+  test("test getPostBySender handles database error", async () => {
+    console.log("Test: GET posts with database error");
+    // Mock Post.find to throw an error
+    const originalFind = Post.find;
+    Post.find = jest.fn().mockImplementation(() => {
+      throw new Error("Database connection failed");
+    });
+
+    const response = await request(app).get("/post");
+    expect(response.statusCode).toBe(500);
+    expect(response.body).toHaveProperty("error");
+    expect(response.body.error).toBe("Database connection failed");
+
+    // Restore original method
+    Post.find = originalFind;
+  });
+
+  test("test getPostById handles database error", async () => {
+    console.log("Test: GET post by ID with database error");
+    const originalFindById = Post.findById;
+    Post.findById = jest.fn().mockImplementation(() => {
+      throw new Error("Database query failed");
+    });
+
+    const response = await request(app).get("/post/507f1f77bcf86cd799439011");
+    expect(response.statusCode).toBe(500);
+    expect(response.body).toHaveProperty("error");
+    expect(response.body.error).toBe("Database query failed");
+
+    Post.findById = originalFindById;
+  });
+
+  test("test deletePost handles database error", async () => {
+    console.log("Test: DELETE post with database error");
+    // First create a post to have a valid ID
+    const createResponse = await request(app)
+      .post("/post")
+      .set("Authorization", `Bearer ${userAData.token}`)
+      .send({ title: "Post for error test", senderID: "sender" });
+    const postId = createResponse.body._id;
+
+    const originalFindById = Post.findById;
+    Post.findById = jest.fn().mockImplementation(() => {
+      throw new Error("Database delete error");
+    });
+
+    const response = await request(app)
+      .delete(`/post/${postId}`)
+      .set("Authorization", `Bearer ${userAData.token}`);
+
+    expect(response.statusCode).toBe(500);
+    expect(response.body).toHaveProperty("error");
+    expect(response.body.error).toBe("Database delete error");
+
+    Post.findById = originalFindById;
+
+    // Clean up - delete the post normally
+    await Post.findByIdAndDelete(postId);
+  });
+
+  test("test putPost handles database error", async () => {
+    console.log("Test: PUT post with database error");
+    // First create a post to have a valid ID
+    const createResponse = await request(app)
+      .post("/post")
+      .set("Authorization", `Bearer ${userAData.token}`)
+      .send({ title: "Post for update error test", senderID: "sender" });
+    const postId = createResponse.body._id;
+
+    const originalFindById = Post.findById;
+    Post.findById = jest.fn().mockImplementation(() => {
+      throw new Error("Database update error");
+    });
+
+    const response = await request(app)
+      .put(`/post/${postId}`)
+      .set("Authorization", `Bearer ${userAData.token}`)
+      .send({ title: "Updated Title", senderID: "sender" });
+
+    expect(response.statusCode).toBe(500);
+    expect(response.body).toHaveProperty("error");
+    expect(response.body.error).toBe("Database update error");
+
+    Post.findById = originalFindById;
+
+    // Clean up
+    await Post.findByIdAndDelete(postId);
   });
 });

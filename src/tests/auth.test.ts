@@ -3,6 +3,7 @@ import intApp from "../index";
 import { Express } from "express";
 import User from "../model/userModel";
 import Post from "../model/postModel";
+import jwt from "jsonwebtoken";
 import { userData, singlePostData } from "./testUtils";
 
 let app: Express;
@@ -280,5 +281,81 @@ describe("Auth API", () => {
         });
         expect(refreshResponse.statusCode).toBe(401);
         expect(refreshResponse.body).toHaveProperty("error");
+    });
+});
+
+// Edge Case Tests: Deleted User Scenarios (covers lines 97, 114, 150)
+describe("Auth API - Deleted User Edge Cases", () => {
+    const deletedUserData = {
+        username: "deletedUser",
+        email: "deleted@test.com",
+        password: "deletedPassword123"
+    };
+
+    test("test refreshToken with deleted user returns 401 (line 114)", async () => {
+        // Register a user
+        const registerResponse = await request(app).post("/auth/register").send(deletedUserData);
+        expect(registerResponse.statusCode).toBe(201);
+        const userId = registerResponse.body._id;
+        const refreshToken = registerResponse.body.refreshToken;
+
+        // Delete the user from the database
+        await User.findByIdAndDelete(userId);
+
+        // Try to use the refresh token - user no longer exists
+        const refreshResponse = await request(app).post("/auth/refresh-token").send({
+            refreshToken: refreshToken
+        });
+
+        expect(refreshResponse.statusCode).toBe(401);
+        expect(refreshResponse.body).toHaveProperty("error");
+        expect(refreshResponse.body.error).toBe("Invalid refresh token");
+    });
+
+    test("test logout with deleted user returns 401 (line 150)", async () => {
+        // Register a new user
+        const newUser = {
+            username: "anotherDeletedUser",
+            email: "anotherdeleted@test.com",
+            password: "anotherPassword123"
+        };
+        const registerResponse = await request(app).post("/auth/register").send(newUser);
+        expect(registerResponse.statusCode).toBe(201);
+        const userId = registerResponse.body._id;
+        const refreshToken = registerResponse.body.refreshToken;
+
+        // Delete the user from the database
+        await User.findByIdAndDelete(userId);
+
+        // Try to logout - user no longer exists
+        const logoutResponse = await request(app).post("/auth/logout").send({
+            refreshToken: refreshToken
+        });
+
+        expect(logoutResponse.statusCode).toBe(401);
+        expect(logoutResponse.body).toHaveProperty("error");
+        expect(logoutResponse.body.error).toBe("Invalid refresh token");
+    });
+});
+
+// Database Error Tests (covers line 97 - login catch block)
+describe("Auth API - Database Error Handling", () => {
+    test("test login handles database error (line 97)", async () => {
+        console.log("Test: Login with database error");
+        const originalFindOne = User.findOne;
+        User.findOne = jest.fn().mockImplementation(() => {
+            throw new Error("Database connection failed");
+        });
+
+        const response = await request(app).post("/auth/login").send({
+            email: userData.email,
+            password: userData.password
+        });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.body).toHaveProperty("error");
+        expect(response.body.error).toBe("Login failed");
+
+        User.findOne = originalFindOne;
     });
 });
