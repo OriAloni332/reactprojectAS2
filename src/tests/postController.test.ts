@@ -15,6 +15,7 @@ beforeAll(async () => {
 
   // Register and login to get authentication token
   await request(app).post("/auth/register").send({
+    username: userData.username,
     email: userData.email,
     password: userData.password,
   });

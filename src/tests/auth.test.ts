@@ -24,6 +24,7 @@ describe("Auth API", () => {
 
     test("test register with missing email", async () => {
         const response = await request(app).post("/auth/register").send({
+            username: userData.username,
             password: userData.password
         });
         expect(response.statusCode).toBe(401);
@@ -32,6 +33,7 @@ describe("Auth API", () => {
 
     test("test register with missing password", async () => {
         const response = await request(app).post("/auth/register").send({
+            username: userData.username,
             email: userData.email
         });
         expect(response.statusCode).toBe(401);
@@ -40,6 +42,7 @@ describe("Auth API", () => {
 
     test("test register", async () => {
         const response = await request(app).post("/auth/register").send({
+            username: userData.username,
             email: userData.email,
             password: userData.password
         });
@@ -53,6 +56,7 @@ describe("Auth API", () => {
 
     test("test register with duplicate email", async () => {
         const response = await request(app).post("/auth/register").send({
+            username: userData.username,
             email: userData.email,
             password: userData.password
         });

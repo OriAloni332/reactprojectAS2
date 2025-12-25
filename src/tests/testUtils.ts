@@ -6,6 +6,7 @@ import User from "../model/userModel";
 
 // User test data types
 export type UserData = {
+  username: string;
   email: string;
   password: string;
   _id?: string;
@@ -14,6 +15,7 @@ export type UserData = {
 };
 
 export const userData: UserData = {
+  username: "testUser",
   email: "test@testAuth.com",
   password: "testPasswordAuth123",
 };
